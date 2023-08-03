@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:slack="http://www.mulesoft.org/schema/mule/slack" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/slack http://www.mulesoft.org/schema/mule/slack/current/mule-slack.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="f6fc2ec3-873b-4cec-8474-353fe728175d" >
+		<http:listener-connection host="0.0.0.0" port="8082" protocol="HTTPS">
+			<tls:context >
+				<tls:key-store type="jks" path="keystore.jks" alias="mule" keyPassword="password" password="password" />
+			</tls:context>
+		</http:listener-connection>
+	</http:listener-config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="63f3fcf6-65e3-4fd3-9480-9874d58a6a3f" responseTimeout="600000">
+		<http:request-connection protocol="HTTPS" host="api.openai.com" />
+		<http:default-headers >
+			<http:default-header key="Authorization" value="Bearer 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" />
+		</http:default-headers>
+	</http:request-config>
+	<slack:config name="Slack_Connector_Config" doc:name="Slack Connector Config" doc:id="ecc244b6-4e93-48e1-8740-c3209e4bc618" >
+		<slack:slack-auth-connection >
+			<slack:oauth-authorization-code consumerKey="5510702554726.5510824969030" consumerSecret="ce1d5bbe2c327ec25affcd36b42c3b05" scopes="channels:read chat:write:bot channels:history" />
+			<slack:oauth-callback-config listenerConfig="HTTP_Listener_config" callbackPath="/callback" authorizePath="/authorize" externalCallbackUrl="https://0.0.0.0:8082/callback" />
+		</slack:slack-auth-connection>
+	</slack:config>
+<!-- 	<db:config name="Database_Config" doc:name="Database Config" doc:id="5910c73a-94fb-4c24-9805-3a818c6629fc" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="root" database="mma_demo" />
+	</db:config> -->
+	<ee:object-store-caching-strategy name="Caching_Strategy" doc:name="Caching Strategy" doc:id="a821185c-c3cf-4ae0-8aa8-624bb892723a" keyGenerationExpression="dbresultsnew2" objectStore="Object_store"/>
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="1b639e6c-ea06-4454-ad97-eee848351bfd" entryTtl="11" entryTtlUnit="HOURS" expirationInterval="10" />
+	<http:listener-config name="HTTP_Listener_config1" doc:name="HTTP Listener config" doc:id="a4c943ac-00b4-4106-af81-cf59f4505341" >
+		<http:listener-connection host="0.0.0.0" port="8083" />
+	</http:listener-config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="99c3f911-31c4-4e17-aa3b-9aeac39c41e1" >
+		<salesforce:basic-connection username="sujit@mmahack.com" password="MMAHack@123" securityToken="0SVBg402K8hHBw6fFneZR1c1" />
+	</salesforce:sfdc-config>
+	<flow name="mainFlow" doc:id="00ded7b9-58ff-4aab-9e14-4f34584a4803" >
+		<slack:on-new-message-trigger doc:name="On new message trigger" doc:id="921e26b7-910e-4321-b796-c3ac9da06bb4" config-ref="Slack_Connector_Config" channel="C05ESTZ5SQP" limit="5">
+			<scheduling-strategy >
+				<fixed-frequency frequency="5" timeUnit="SECONDS"/>
+			</scheduling-strategy>
+		</slack:on-new-message-trigger>
+		<logger level="INFO" doc:name="Logger" doc:id="dec57095-7a67-4b8f-a887-b10ad0c9183d" message="msg from slack channel"/>
+		<choice doc:name="Choice" doc:id="3b85eb87-4db1-4ce2-a377-a9c267b71780" >
+			<when expression='#[payload.subtype != "bot_message"]'>
+								<flow-ref doc:name="fetch required data" doc:id="764d2bcd-ca64-48a1-ae06-afc3f9054f5e" name="specificDataFetchFlow"/>
+				<ee:transform doc:name="request to gpt" doc:id="b135ac3d-dc3b-44a6-82c2-b3f3e5d1bacf">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    "model": "gpt-3.5-turbo",
+    "messages": [
+        {
+            "role": "user",
+            "content": write(vars.data, "application/json")
+        },
+        {
+            "role": "user",
+            "content": payload.text
+        }
+    ]
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="ce9c4d2b-d2a5-4d03-b941-e881e686638f" message="request sent to GPT"/>
+				<http:request method="POST" doc:name="GPT" doc:id="2d940edf-16a6-45e6-bcc2-b26dd81bead5" config-ref="HTTP_Request_configuration" path="/v1/chat/completions" responseTimeout="600000" />
+				<logger level="INFO" doc:name="Logger" doc:id="4909e2aa-de6c-4972-8f2a-401eb9a05a47" message="got response from GPT"/>
+				<ee:transform doc:name="response" doc:id="024ce09b-87bf-4893-aec3-2dc65db3cefc">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="response"><![CDATA[%dw 2.0
+output text/plain
+---
+payload.choices.message.content[0]]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+				<ee:transform doc:name="request to slack" doc:id="7f3539e6-6677-4b6c-9e23-cc599c9f666a">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+        channel: "demo-mma-channel",
+        text: vars.response
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+				<slack:create-chatpost-message doc:id="9ed80419-2cf2-49e5-b26b-258dd5e83dc4" config-ref="Slack_Connector_Config" />
+				<ee:transform doc:name="response from slack" doc:id="6160560e-c9a1-4a26-baf3-6d98d8743e3d">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="cd297402-131c-464a-8f4e-6d8407bfd245" message="#[payload]" />
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="2b7aa2a2-e5da-48bc-9f31-e43de0e9d200" message="tp"/>
+			</otherwise>
+		</choice>
+	
+</flow>
+	<flow name="dbFetchFlow" doc:id="0df61e42-bb01-433f-bd5b-e76d10b1b650" >
+		<scheduler doc:name="Scheduler" doc:id="43613347-2530-4e0a-a1fd-602409d4f943" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="6" timeUnit="HOURS"/>
+			</scheduling-strategy>
+		</scheduler>
+<!-- 		<db:select doc:name="Select" doc:id="48d52c00-7bf5-4fd3-bbba-264fa4a027b7" config-ref="Database_Config">
+			<db:sql><![CDATA[select value from employee_details;]]></db:sql>
+		</db:select> -->
+		<salesforce:query doc:name="Query" doc:id="d3daa53f-8aed-41b2-b9ca-3fcd4f5b57dd" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query ><![CDATA[select value__c from employee_details__c ]]></salesforce:salesforce-query>
+		</salesforce:query>
+		<ee:cache doc:name="Cache" doc:id="f8fc53c2-5ad2-4754-8a7b-96c28497bd6a" cachingStrategy-ref="Caching_Strategy">
+			<ee:transform doc:name="Transform Message" doc:id="064abc41-a3bf-49e3-a613-de70d0e165a1" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload.value__c map (jsonString) -> read(jsonString replace "&quot;" with '"', "application/json")]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+		</ee:cache>
+	</flow>
+	<flow name="specificDataFetchFlow" doc:id="03d0e991-fc92-4fa5-b32c-f6f4a056dd16" >
+<!-- 		<http:listener doc:name="Listener" doc:id="106d0b04-c721-4db0-bae6-c62099c426fe" config-ref="HTTP_Listener_config1" path="/data1"/>
+ -->		<os:retrieve doc:id="7b1c61b1-b02b-43df-88f8-5f8f66e78773" key="dbresultsnew2" objectStore="Object_store" target="data" />
+		<ee:transform doc:name="truedata" doc:id="f7241fc8-361f-4db9-87cf-9ffc51c73754">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="truedata"><![CDATA[vars.data.message.typedValue]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ee:transform doc:name="ids" doc:id="8741553c-378b-49c8-b5e5-41a3a591ed2b" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="ids" ><![CDATA[vars.truedata.id]]></ee:set-variable>
+			</ee:variables>
+		
+</ee:transform>
+		<ee:transform doc:name="numbers" doc:id="c96cf351-8819-4ce0-91a4-4167e1d8ad6a" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="numbers" ><![CDATA[%dw 2.0
+output application/java
+var inputString = payload.text
+var arr = inputString splitBy " "
+var numberPattern = /-?\d+(\.\d+)?/
+var numbers = arr filter ((str) -> str matches numberPattern) map ((matchedString) -> matchedString as Number)
+---
+numbers]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ee:transform doc:name="commonNumbers" doc:id="46893a3b-fd69-4d14-95f5-30411a9363ac" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="commonNumbers" ><![CDATA[%dw 2.0
+output application/java
+var array1 = vars.ids
+var array2 = vars.numbers
+var commonNumbers = array1 filter ((item) -> array2 contains item)
+---
+commonNumbers]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<choice doc:name="Choice" doc:id="fab864f9-3def-435d-bfae-da7963be94a9" >
+			<when expression="#[%dw 2.0&#10;output application/java&#10;---&#10;sizeOf(vars.commonNumbers) &gt; 0]">
+				<ee:transform doc:name="finaldata" doc:id="0d8387f7-ce9b-4886-80f0-10b71e92ab6f" >
+					<ee:message >
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="finaldata" ><![CDATA[%dw 2.0
+output application/json
+---
+vars.truedata filter ((item) -> vars.commonNumbers contains item.id)]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="finaldata" doc:id="a107845f-e937-43ec-a6d6-6335126537cc" >
+					<ee:message >
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="finaldata" ><![CDATA[vars.truedata]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		<ee:transform doc:name="data" doc:id="e796ed78-a9bc-4923-8663-9a61fb9f0504" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="data" ><![CDATA[vars.finaldata]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="9221af3e-ee05-470d-9468-0a7c4c4c4115" message="data passed to gpt is #[vars.data]"/>
+	
+</flow>
+</mule>
